@@ -2,6 +2,7 @@ const User = require('../models/user.model');
 const Role = require('../models/role.model');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../config/jwt');
 
 exports.getAllUsers = async (req, res) => {
   try {
@@ -60,7 +61,7 @@ exports.loginUser = async (req, res) => {
       name: user.name,
       email: user.email
     };
-    const token = jwt.sign(payload, 'my_secret_key', { expiresIn: '14h' });
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '14h' });
     res.status(200).json({ message: 'Inicio de sesión exitoso', token });
   } catch (error) {
     console.error('Error al iniciar sesión:', error);

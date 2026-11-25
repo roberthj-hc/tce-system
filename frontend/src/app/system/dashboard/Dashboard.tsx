@@ -13,7 +13,8 @@ import {
   LineChart,
   PieChart as Donut,
   ArrowDown10,
-  ArrowUp10
+  ArrowUp10,
+  DollarSign
 } from "lucide-react"
 
 import {
@@ -37,6 +38,7 @@ import { useAuth } from "@/context/AuthContext"
 export function Dashboard() {
   const {
     loading,
+    exchangeRate,
     summary,
     categorySales,
     weeklySales,
@@ -67,7 +69,29 @@ export function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-2xl font-semibold text-green-600 p-0 pt-4">
-              ${summary.salesToday.toFixed(2)}
+              Bs. {summary.salesToday.toFixed(2)}
+              <p className="text-xs font-normal text-muted-foreground mt-1">
+                Efectivo: Bs. {summary.profitToday.toFixed(2)}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {userRole === 1 && (
+          <Card className="p-6">
+            <CardHeader className="p-0">
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-500" />
+                Tipo de cambio
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold p-0 pt-4">
+              {exchangeRate ? `1 USD = Bs. ${exchangeRate.price}` : "Sin configurar"}
+              {exchangeRate && (
+                <p className="text-xs font-normal text-muted-foreground mt-1">
+                  Actualizado: {new Date(exchangeRate.date).toLocaleDateString("es-BO")}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}

@@ -5,9 +5,10 @@ const path = require('path');
 
 const { getLocalIp } = require('./config/network');
 const { generateQR } = require('./config/qr');
+const { ensureSchema } = require('./config/schema');
 
 const app = express();
-const port = 4000;
+const port = Number(process.env.PORT) || 4000;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -18,7 +19,10 @@ app.use(morgan('dev'));
 app.use(express.json());
 
 const fileUpload = require('express-fileupload');
-app.use(fileUpload());
+app.use(fileUpload({
+  limits: { fileSize: 5 * 1024 * 1024 },
+  abortOnLimit: true,
+}));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/categories', require('./routes/category.routes'));
@@ -34,14 +38,22 @@ app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/dashboard', require('./routes/dashboard.routes'));
 app.use('/api/repairs', require('./routes/repair.routes'));
 app.use('/api/reports', require('./routes/report.routes'));
+app.use('/api/dollar', require('./routes/dollar.routes'));
 app.use("/qr", express.static(path.join(__dirname, "public")));
 app.use("/api/qr", require("./routes/qr.routes"));
 
-app.listen(port, '0.0.0.0', () => {
-  const ip = getLocalIp();
-  console.log(`Servidor iniciado en http://${ip}:${port}`);
-  generateQR();
-});
+ensureSchema()
+  .then(() => {
+    app.listen(port, '0.0.0.0', () => {
+      const ip = getLocalIp();
+      console.log(`Servidor iniciado en http://${ip}:${port}`);
+      generateQR();
+    });
+  })
+  .catch((err) => {
+    console.error('Error preparando la base de datos:', err);
+    process.exit(1);
+  });
 
 
 

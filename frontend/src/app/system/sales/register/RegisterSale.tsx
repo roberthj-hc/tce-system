@@ -5,6 +5,7 @@ import { Barcode, Plus, Trash2, Eye } from "lucide-react"
 import { useRegisterSale } from "./useRegisterSale"
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner"
 import { useState } from "react"
+import { RateSwitch } from "@/components/RateSwitch"
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -26,6 +27,10 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL
 function RegisterSalePage() {
     const router = useRouter()
     const {
+        rate,
+        useCurrentRate,
+        setUseCurrentRate,
+        getPricing,
         products,
         productList,
         filteredManualOptions,
@@ -269,6 +274,8 @@ function RegisterSalePage() {
                         </div>
                     </div>
 
+                    <RateSwitch checked={useCurrentRate} onCheckedChange={setUseCurrentRate} rate={rate} />
+
                     <div className="grid grid-cols-1 md:grid-cols-9 gap-4 items-end">
                         <div className="md:col-span-6">
                             <Label className="mb-2">Buscar Producto</Label>
@@ -286,7 +293,7 @@ function RegisterSalePage() {
                         </div>
                         <div className="md:col-span-2">
                             <Label>Precio Unitario</Label>
-                            <Input value={manualSelected?.price ?? ""} disabled />
+                            <Input value={manualSelected ? getPricing(manualSelected).price : ""} disabled />
                         </div>
                         <div className="md:col-span-1">
                             <Button className="w-full flex gap-2" onClick={() => addManualProduct()} disabled={!manualSelected}>
@@ -403,7 +410,7 @@ function RegisterSalePage() {
                                 </div>
                                 <div>
                                     <p className="text-sm font-semibold text-muted-foreground">Precio de Venta</p>
-                                    <p className="text-base">{selectedProduct.price} Bs</p>
+                                    <p className="text-base">{getPricing(selectedProduct).price} Bs</p>
                                 </div>
                                 <div>
                                     <p className="text-sm font-semibold text-muted-foreground">Stock Actual</p>

@@ -10,7 +10,7 @@ module.exports = {
       TIME(s.date) AS sale_time,
       u.name AS seller_name,
       s.total AS total_sale,
-      (SELECT SUM(sd.quantity * (sd.unit_price - p.cost))
+      (SELECT SUM(sd.quantity * (sd.unit_price - COALESCE(sd.unit_cost, p.cost)))
        FROM sale_details sd
        JOIN products p ON sd.product_id = p.product_id
        WHERE sd.sale_id = s.sale_id) AS total_profit,
@@ -45,15 +45,15 @@ module.exports = {
         DATE(s.date) AS sale_date,
         u.name AS seller_name,
         s.total AS total_sale,
-        SUM(sd.quantity * (sd.unit_price - p.cost)) AS total_profit,
+        SUM(sd.quantity * (sd.unit_price - COALESCE(sd.unit_cost, p.cost))) AS total_profit,
         GROUP_CONCAT(
           JSON_OBJECT(
             'product_name', p.name,
             'category_name', c.name,
             'quantity', sd.quantity,
             'unit_price', sd.unit_price,
-            'cost', p.cost,
-            'profit', sd.quantity * (sd.unit_price - p.cost)
+            'cost', COALESCE(sd.unit_cost, p.cost),
+            'profit', sd.quantity * (sd.unit_price - COALESCE(sd.unit_cost, p.cost))
           )
           ORDER BY p.name ASC SEPARATOR '|'
         ) AS products_json
@@ -91,7 +91,7 @@ module.exports = {
       SELECT
         DATE(s.date) AS sale_date,
         SUM(s.total) AS total_sales,
-        SUM(sd.quantity * (sd.unit_price - p.cost)) AS total_profit
+        SUM(sd.quantity * (sd.unit_price - COALESCE(sd.unit_cost, p.cost))) AS total_profit
       FROM sales s
       JOIN sale_details sd ON s.sale_id = sd.sale_id
       JOIN products p ON sd.product_id = p.product_id
@@ -111,7 +111,7 @@ module.exports = {
       SELECT
         DATE_FORMAT(s.date, '%Y-%m') AS sale_month,
         SUM(s.total) AS total_sales,
-        SUM(sd.quantity * (sd.unit_price - p.cost)) AS total_profit
+        SUM(sd.quantity * (sd.unit_price - COALESCE(sd.unit_cost, p.cost))) AS total_profit
       FROM sales s
       JOIN sale_details sd ON s.sale_id = sd.sale_id
       JOIN products p ON sd.product_id = p.product_id

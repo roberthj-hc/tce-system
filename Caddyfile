@@ -1,0 +1,32 @@
+# SITE_ADDRESS = IP o nombre con el que los equipos de la red entran (ver .env)
+# localhost permite probar desde el propio servidor
+{$SITE_ADDRESS}, localhost {
+	# Certificado propio (CA interna de Caddy): no sale a internet
+	tls internal
+	encode gzip
+
+	request_body {
+		max_size 10MB
+	}
+
+	# Ruta propia de Next.js (debe ir antes que /api/*)
+	handle /api/proxy/* {
+		reverse_proxy frontend:3000
+	}
+
+	handle /api/* {
+		reverse_proxy backend:4000
+	}
+
+	# Imágenes de productos y QR
+	handle /products/* {
+		reverse_proxy backend:4000
+	}
+	handle /qr/* {
+		reverse_proxy backend:4000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

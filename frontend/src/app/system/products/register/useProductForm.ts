@@ -10,6 +10,51 @@ import { notify } from "@/lib/notify"
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL
 
+// Margen sugerido para productos nuevos (editable en el formulario)
+export const DEFAULT_MARGIN = "30"
+
+const toNum = (s: string) => {
+    const n = parseFloat(s)
+    return Number.isNaN(n) ? null : n
+}
+const fmt2 = (n: number) => String(Math.round(n * 100) / 100)
+const fmt4 = (n: number) => String(Math.round(n * 10000) / 10000)
+
+type PriceFields = { cost_usd: string; cost: string; margin_percent: string; price: string }
+
+// Mantiene coherentes costo USD, costo Bs, margen y precio. Cualquiera se puede editar
+// a mano y los demás se ajustan.
+function recalc<T extends PriceFields>(form: T, changed: keyof PriceFields, rate: number | null): T {
+    const next = { ...form }
+    const margin = toNum(next.margin_percent)
+    const priceFromCost = () => {
+        const c = toNum(next.cost)
+        if (c !== null && margin !== null) next.price = fmt2(c * (1 + margin / 100))
+    }
+    if (changed === "cost_usd") {
+        const usd = toNum(next.cost_usd)
+        if (usd !== null && rate) {
+            next.cost = fmt2(usd * rate)
+            priceFromCost()
+        }
+    } else if (changed === "cost") {
+        const c = toNum(next.cost)
+        if (c !== null) {
+            if (rate) next.cost_usd = fmt4(c / rate)
+            priceFromCost()
+        }
+    } else if (changed === "margin_percent") {
+        priceFromCost()
+    } else if (changed === "price") {
+        const p = toNum(next.price)
+        const c = toNum(next.cost)
+        if (p !== null && c !== null && c > 0) {
+            next.margin_percent = fmt2(Math.min(Math.max((p / c - 1) * 100, -100), 99999))
+        }
+    }
+    return next
+}
+
 export type Category = { category_id: number; name: string; section_id: number }
 export type Section = { section_id: number; name: string }
 export type Supplier = { supplier_id: number; name: string }
@@ -27,12 +72,20 @@ export function useProductForm() {
         supplier_id: "",
         price: "",
         cost: "",
+        cost_usd: "",
+        margin_percent: DEFAULT_MARGIN,
         stock: "",
         stock_minimum: "",
         photo: "",
         description: "",
         active: true
     })
+
+    // Tipo de cambio vigente (Bs por 1 USD)
+    const [rate, setRate] = useState<number | null>(null)
+    // Tipo de cambio con el que se calcula ESTE producto. Al editar se conserva el que tenía guardado;
+    // solo cambia si el usuario pide usar el vigente.
+    const [appliedRate, setAppliedRate] = useState<number | null>(null)
 
     const [sections, setSections] = useState<Section[]>([])
     const [selectedSection, setSelectedSection] = useState<Section | null>(null)
@@ -50,6 +103,14 @@ export function useProductForm() {
     useEffect(() => {
         async function fetchInitialData() {
             try {
+                try {
+                    const rateRes = await fetch(`${apiUrl}/api/dollar/current`)
+                    const rateData = await rateRes.json()
+                    if (rateRes.ok && rateData) {
+                        setRate(Number(rateData.price))
+                        setAppliedRate(Number(rateData.price))
+                    }
+                } catch { /* sin tipo de cambio configurado */ }
                 const secRes = await fetch(`${apiUrl}/api/sections/list`)
                 const secData = await secRes.json()
                 if (secRes.ok) setSections(secData)
@@ -67,6 +128,10 @@ export function useProductForm() {
                     const res = await fetch(`${apiUrl}/api/products/${editingId}`)
                     const data = await res.json()
                     if (res.ok) {
+                        const usd = Number(data.cost_usd)
+                        const storedRate = Number(data.exchange_rate)
+                        if (storedRate > 0) setAppliedRate(storedRate)
+                        else if (usd > 0 && Number(data.cost) > 0) setAppliedRate(Number(data.cost) / usd)
                         setProductForm({
                             name: data.name || "",
                             barcode: data.barcode || "",
@@ -75,6 +140,13 @@ export function useProductForm() {
                             supplier_id: String(data.supplier_id || ""),
                             price: String(data.price || ""),
                             cost: String(data.cost || ""),
+                            cost_usd: data.cost_usd != null ? String(Number(data.cost_usd)) : "",
+                            margin_percent:
+                                data.margin_percent != null
+                                    ? String(Number(data.margin_percent))
+                                    : Number(data.cost) > 0
+                                        ? fmt2((Number(data.price) / Number(data.cost) - 1) * 100)
+                                        : "",
                             stock: String(data.stock || ""),
                             stock_minimum: String(data.stock_minimum || ""),
                             photo: data.photo || "",
@@ -122,11 +194,15 @@ export function useProductForm() {
     const handleChange = async (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         let validatedValue = value;
-        if (["price", "cost", "stock", "stock_minimum"].includes(name)) {
+        if (["price", "cost", "cost_usd", "margin_percent", "stock", "stock_minimum"].includes(name)) {
             validatedValue = value.replace(/[^0-9.]/g, '');
             if (validatedValue.startsWith('.')) validatedValue = '0' + validatedValue;
         }
-        setProductForm({ ...form, [name]: validatedValue });
+        if (["price", "cost", "cost_usd", "margin_percent"].includes(name)) {
+            setProductForm(recalc({ ...form, [name]: validatedValue }, name as keyof PriceFields, appliedRate));
+        } else {
+            setProductForm({ ...form, [name]: validatedValue });
+        }
 
         if (name === "barcode" && value.trim().length > 0 && !isEditing) {
             setCheckingBarcode(true);
@@ -153,6 +229,24 @@ export function useProductForm() {
             }
         }
     };
+
+    // Cuando cambia el tipo de cambio, el costo/precio del formulario se recalcula desde el costo en USD
+    // Al editar un producto con costo en USD NO se cambia su tipo de cambio automáticamente.
+    const handleRateChanged = (newRate: number | null) => {
+        setRate(newRate)
+        if (!newRate) return
+        if (!isEditing || toNum(form.cost_usd) === null) {
+            setAppliedRate(newRate)
+            if (toNum(form.cost_usd) !== null) setProductForm(recalc(form, "cost_usd", newRate))
+        }
+    }
+
+    // Recalcula este producto con el tipo de cambio vigente (acción explícita del usuario)
+    const handleUseCurrentRate = () => {
+        if (!rate) return
+        setAppliedRate(rate)
+        if (toNum(form.cost_usd) !== null) setProductForm(recalc(form, "cost_usd", rate))
+    }
 
     const filteredCategories = selectedSection
         ? categories.filter(c => c.section_id === selectedSection.section_id)
@@ -304,6 +398,7 @@ export function useProductForm() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     ...form,
+                    exchange_rate: toNum(form.cost_usd) !== null ? appliedRate : null,
                     user_id
                 })
             });
@@ -332,6 +427,8 @@ export function useProductForm() {
                         supplier_id: "",
                         price: "",
                         cost: "",
+                        cost_usd: "",
+                        margin_percent: DEFAULT_MARGIN,
                         stock: "",
                         stock_minimum: "",
                         photo: "",
@@ -348,6 +445,10 @@ export function useProductForm() {
     }
 
     return {
+        rate,
+        appliedRate,
+        handleRateChanged,
+        handleUseCurrentRate,
         form,
         categories,
         suppliers,

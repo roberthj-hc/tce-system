@@ -6,6 +6,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL
 export type Summary = {
   salesToday: number
   lowStockAlerts: number
+  profitToday: number
   topProducts: { name: string; sales: number }[]
 }
 
@@ -34,8 +35,10 @@ export function useDashboard() {
   const [summary, setSummary] = useState<Summary>({
     salesToday: 0,
     lowStockAlerts: 0,
+    profitToday: 0,
     topProducts: []
   })
+  const [exchangeRate, setExchangeRate] = useState<{ price: number; date: string } | null>(null)
 
   const [categorySales, setCategorySales] = useState<CategorySalesItem[]>([])
   const [weeklySales, setWeeklySales] = useState<WeeklySalesItem[]>([])
@@ -54,6 +57,7 @@ export function useDashboard() {
         }
 
         setSummary(data.summary)
+        setExchangeRate(data.exchangeRate ?? null)
         setCategorySales(data.categorySales)
         setWeeklySales(data.weeklySales)
         setTotalStock(data.totalStock)
@@ -77,6 +81,7 @@ export function useDashboard() {
 
   return {
     loading,
+    exchangeRate,
     summary,
     categorySales,
     weeklySales,

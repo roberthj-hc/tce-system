@@ -12,8 +12,7 @@ async function generateQR(urlManual = null) {
     url = urlManual
     colorDark = "#008000"
   } else {
-    const ip = getLocalIp()
-    url = `http://${ip}:3000`
+    url = process.env.PUBLIC_URL || `http://${getLocalIp()}:3000`
   }
 
   try {

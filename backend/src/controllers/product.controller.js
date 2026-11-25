@@ -35,9 +35,9 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ error: 'El código de barras ya está registrado.' });
     }
 
-    const { id, name } = await Product.create(req.body);
-
+    // El stock inicial entra solo por el movimiento de inventario (si no, se contaba dos veces)
     const stockInicial = Number(req.body.stock);
+    const { id, name } = await Product.create({ ...req.body, stock: stockInicial > 0 ? 0 : req.body.stock });
     if (stockInicial > 0) {
       const movement = {
         product_id: id,
@@ -77,12 +77,17 @@ exports.uploadProductPhoto = async (req, res) => {
     return res.status(400).json({ error: 'No se subió ningún archivo.' });
   }
   const photo = req.files.photo;
+  const ext = path.extname(path.basename(photo.name)).toLowerCase();
+  if (!['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext) || !photo.mimetype.startsWith('image/')) {
+    return res.status(400).json({ error: 'Solo se permiten imágenes (jpg, png, webp, gif).' });
+  }
   const uploadDir = path.join(__dirname, '..', 'public', 'products');
 
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
-  const fileName = `${Date.now()}-${photo.name}`;
+  const safeBase = path.basename(photo.name, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60);
+  const fileName = `${Date.now()}-${safeBase}${ext}`;
   const filePath = path.join(uploadDir, fileName);
   const serverPath = `/products/${fileName}`;
 

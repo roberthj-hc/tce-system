@@ -2,6 +2,7 @@ const db = require('../config/db');
 const Sale = require('../models/sale.model');
 const SaleDetail = require('../models/saleDetail.model');
 const Product = require('../models/product.model');
+const Dollar = require('../models/dollar.model');
 
 exports.getAllSales = async (req, res) => {
   try {
@@ -23,7 +24,12 @@ exports.createSale = async (req, res) => {
 
     await connection.beginTransaction();
 
-    const saleId = await Sale.create(sale, connection);
+    // Por defecto la venta usa el tipo de cambio más reciente; con use_current_rate=false
+    // se usa el costo con el que se registró cada producto.
+    const rateRow = sale.use_current_rate === false ? null : await Dollar.findLastRegister(connection);
+    const rate = rateRow ? Number(rateRow.price) : null;
+
+    const saleId = await Sale.create({ ...sale, exchange_rate: rate }, connection);
 
     for (const detail of details) {
       const currentStock = await Product.getStock(detail.product_id, connection);
@@ -36,7 +42,7 @@ exports.createSale = async (req, res) => {
         throw new Error(`Stock insuficiente para el producto. ${detail.product_id}`);
       }
 
-      await SaleDetail.create({ ...detail, sale_id: saleId }, connection);
+      await SaleDetail.create({ ...detail, sale_id: saleId }, connection, rate);
 
       const newStock = currentStock - detail.quantity;
       await Product.updateStock(detail.product_id, newStock, connection);

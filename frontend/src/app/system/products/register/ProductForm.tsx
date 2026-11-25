@@ -7,14 +7,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Select, SelectTrigger, SelectItem, SelectContent } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Barcode, Image as ImageIcon, QrCode } from "lucide-react"
+import { Barcode, Image as ImageIcon, QrCode, Settings2 } from "lucide-react"
 import { useProductForm } from "./useProductForm"
+import ExchangeRateDialog from "./ExchangeRateDialog"
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 
 function ProductForm() {
     const {
+        rate,
+        appliedRate,
+        handleRateChanged,
+        handleUseCurrentRate,
         form,
         categories,
         suppliers,
@@ -41,6 +46,7 @@ function ProductForm() {
 
     const router = useRouter()
     const [scanning, setScanning] = useState(false)
+    const [rateDialogOpen, setRateDialogOpen] = useState(false)
     const { videoRef, startScanner, stopScanner } = useBarcodeScanner((value) => {
         handleChange({ target: { name: "barcode", value } } as React.ChangeEvent<HTMLInputElement>)
         setScanning(false)
@@ -185,18 +191,63 @@ function ProductForm() {
                     </fieldset>
                     <fieldset className="space-y-6 border-b pb-6">
                         <legend className="text-lg font-semibold text-primary">Precios y Stock</legend>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 px-4 py-3">
+                            <div className="text-sm space-y-1">
+                                {rate ? (
+                                    <>
+                                        <div>
+                                            Tipo de cambio vigente:{" "}
+                                            <span className="font-semibold">1 USD = Bs. {rate}</span>
+                                        </div>
+                                        {isEditing && form.cost_usd !== "" && appliedRate && appliedRate !== rate && (
+                                            <div className="text-amber-600">
+                                                Este producto está calculado con 1 USD = Bs. {Math.round(appliedRate * 10000) / 10000}.{" "}
+                                                <button
+                                                    type="button"
+                                                    className="underline font-medium"
+                                                    onClick={handleUseCurrentRate}
+                                                >
+                                                    Recalcular con el vigente
+                                                </button>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <span className="text-amber-600">
+                                        No hay tipo de cambio configurado. Regístralo para calcular el costo en Bs.
+                                    </span>
+                                )}
+                            </div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setRateDialogOpen(true)}>
+                                <Settings2 className="w-4 h-4 mr-2" />
+                                Configurar tipo de cambio
+                            </Button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                             <div className="space-y-2">
-                                <Label htmlFor="price">Precio de venta *</Label>
-                                <Input type="number" name="price" value={form.price} onChange={handleChange} />
-                                {errors.price && <p className="text-muted-foreground text-sm">{errors.price}</p>}
+                                <Label htmlFor="cost_usd">Costo (USD)</Label>
+                                <Input type="number" name="cost_usd" value={form.cost_usd} onChange={handleChange} step="any" />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="cost">Costo *</Label>
-                                <Input type="number" name="cost" value={form.cost} onChange={handleChange} />
+                                <Label htmlFor="cost">Costo (Bs) *</Label>
+                                <Input type="number" name="cost" value={form.cost} onChange={handleChange} step="any" />
                                 {errors.cost && <p className="text-muted-foreground text-sm">{errors.cost}</p>}
                             </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="margin_percent">Margen (%)</Label>
+                                <Input type="number" name="margin_percent" value={form.margin_percent} onChange={handleChange} step="any" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="price">Precio de venta (Bs) *</Label>
+                                <Input type="number" name="price" value={form.price} onChange={handleChange} step="any" />
+                                {errors.price && <p className="text-muted-foreground text-sm">{errors.price}</p>}
+                            </div>
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            El tipo de cambio es referencial: sugiere el costo (costo USD × tipo de cambio) y el precio (costo × (1 + margen)),
+                            pero se guardan los valores en Bs que ves aquí, y todos son editables (si cambias el precio, se ajusta el margen).
+                            En ventas puedes elegir usar el tipo de cambio más reciente o el registrado con el producto.
+                        </p>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
                             <div className="space-y-2">
                                 <Label htmlFor="stock">Stock inicial *</Label>
@@ -286,6 +337,11 @@ function ProductForm() {
                         </Button>
                     </div>
                 </form>
+                <ExchangeRateDialog
+                    open={rateDialogOpen}
+                    onOpenChange={setRateDialogOpen}
+                    onChanged={handleRateChanged}
+                />
             </CardContent>
         </Card>
     )

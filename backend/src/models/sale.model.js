@@ -7,10 +7,10 @@ module.exports = {
   },
 
   async create(sale, connection = db) {
-    const { customer_id, seller_id, total } = sale;
+    const { customer_id, seller_id, total, exchange_rate } = sale;
     const [result] = await connection.query(
-      'INSERT INTO sales (date, customer_id, seller_id, total) VALUES (NOW(), ?, ?, ?)',
-      [customer_id, seller_id, total]
+      'INSERT INTO sales (date, customer_id, seller_id, total, exchange_rate) VALUES (NOW(), ?, ?, ?, ?)',
+      [customer_id, seller_id, total, exchange_rate ?? null]
     );
     return result.insertId;
   },

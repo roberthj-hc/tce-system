@@ -40,6 +40,7 @@ import {
 import { Eye } from "lucide-react"
 import { useState } from "react"
 import { useAuth } from "@/context/AuthContext"
+import { RateSwitch } from "@/components/RateSwitch"
 
 function formatSmartNumber(value: number): string {
     return value % 1 === 0 ? value.toString() : value.toFixed(2)
@@ -50,6 +51,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL
 export function ProductList() {
     const { user, loading } = useAuth()
     const {
+        rate, useCurrentRateSwitch, setUseCurrentRateSwitch,
         search, setSearch,
         categoryFilter, setCategoryFilter,
         categories,
@@ -124,6 +126,7 @@ export function ProductList() {
             </div>
 
             <Card className="p-4 space-y-6 shadow-sm mt-6">
+                <RateSwitch checked={useCurrentRateSwitch} onCheckedChange={setUseCurrentRateSwitch} rate={rate} />
                 <div className="flex flex-col md:flex-row justify-between gap-4">
                     <div className="flex flex-wrap gap-4">
                         <Input
@@ -229,7 +232,14 @@ export function ProductList() {
                                 <TableCell>{prod.name}</TableCell>
                                 <TableCell className="max-w-[120px] truncate">{prod.brand}</TableCell>
                                 <TableCell className="text-green-600">Bs. {formatSmartNumber(Number(prod.price))}</TableCell>
-                                <TableCell className="text-blue-400">Bs. {formatSmartNumber(Number(prod.cost))}</TableCell>
+                                <TableCell className="text-blue-400">
+                                    Bs. {formatSmartNumber(Number(prod.cost))}
+                                    {prod.cost_usd != null && (
+                                        <span className="block text-xs text-muted-foreground">
+                                            $ {formatSmartNumber(Number(prod.cost_usd))}
+                                        </span>
+                                    )}
+                                </TableCell>
                                 <TableCell className="text-orange-600">{prod.stock}</TableCell>
                                 <TableCell>
                                     {prod.active ? (
@@ -344,6 +354,25 @@ export function ProductList() {
                                     <p className="text-sm font-semibold text-muted-foreground">Costo</p>
                                     <p className="text-base text-blue-400">Bs. {selectedProduct.cost}</p>
                                 </div>
+                                {selectedProduct.cost_usd != null && (
+                                    <div>
+                                        <p className="text-sm font-semibold text-muted-foreground">Costo (USD)</p>
+                                        <p className="text-base text-blue-400">
+                                            $ {Number(selectedProduct.cost_usd)}
+                                            {selectedProduct.exchange_rate != null && (
+                                                <span className="text-xs text-muted-foreground">
+                                                    {" "}(a Bs. {Number(selectedProduct.exchange_rate)} por USD)
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                )}
+                                {selectedProduct.margin_percent != null && (
+                                    <div>
+                                        <p className="text-sm font-semibold text-muted-foreground">Margen</p>
+                                        <p className="text-base">{Number(selectedProduct.margin_percent)} %</p>
+                                    </div>
+                                )}
                                 <div>
                                     <p className="text-sm font-semibold text-muted-foreground">Stock Actual</p>
                                     <p className="text-base text-orange-600">{selectedProduct.stock}</p>

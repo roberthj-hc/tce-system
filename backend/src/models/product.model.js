@@ -1,5 +1,11 @@
 const db = require('../config/db');
 
+const clampMargin = (v) => {
+  const n = numOrNull(v);
+  return n === null ? null : Math.min(Math.max(n, -100), 99999.99);
+};
+const numOrNull = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+
 module.exports = {
   async getAll(status = "active") {
     let query = `
@@ -10,6 +16,9 @@ module.exports = {
         p.brand,
         p.price,
         p.cost,
+        p.cost_usd,
+        p.margin_percent,
+        p.exchange_rate,
         p.stock,
         p.stock_minimum,
         p.photo,
@@ -47,6 +56,9 @@ module.exports = {
       brand,
       price,
       cost,
+      cost_usd,
+      margin_percent,
+      exchange_rate,
       stock,
       stock_minimum,
       photo,
@@ -57,17 +69,27 @@ module.exports = {
     } = product;
 
     const [result] = await db.query(
-      'INSERT INTO products (name, barcode, brand, price, cost, stock, stock_minimum, photo, description, active, category_id, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, barcode, brand, price, cost, stock, stock_minimum, photo, description, active, category_id, supplier_id]
+      'INSERT INTO products (name, barcode, brand, price, cost, cost_usd, margin_percent, exchange_rate, stock, stock_minimum, photo, description, active, category_id, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, barcode, brand, price, cost, numOrNull(cost_usd), clampMargin(margin_percent), numOrNull(cost_usd) === null ? null : numOrNull(exchange_rate), stock, stock_minimum, photo, description, active, category_id, supplier_id]
     );
 
     return { id: result.insertId, name };
   },
 
   async update(id, product) {
+    const allowed = ['name', 'barcode', 'brand', 'price', 'cost', 'cost_usd', 'margin_percent', 'exchange_rate',
+      'stock_minimum', 'photo', 'description', 'active', 'category_id', 'supplier_id'];
+    const data = {};
+    for (const key of allowed) {
+      if (product[key] === undefined) continue;
+      data[key] = key === 'margin_percent' ? clampMargin(product[key])
+        : ['cost_usd', 'exchange_rate'].includes(key) ? numOrNull(product[key])
+        : product[key];
+    }
+    if (Object.keys(data).length === 0) return { affectedRows: 0 };
     const [result] = await db.query(
       'UPDATE products SET ? WHERE product_id = ?',
-      [product, id]);
+      [data, id]);
     return result;
   },
 

@@ -1,67 +1,68 @@
 const Dollar = require('../models/dollar.model');
 
-exports.getAllRegister = async (req, res) => {
+// El tipo de cambio es variable: cada registro es solo un valor histórico/vigente.
+// Los productos guardan el tipo de cambio con el que se calcularon (products.exchange_rate)
+// y NO se recalculan cuando cambia el dólar.
+
+function parseRate(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 && n < 1000 ? Math.round(n * 10000) / 10000 : null;
+}
+
+exports.getAll = async (req, res) => {
   try {
-    const dollar = await Dollar.getAll();
-    res.json(dollar);
+    res.json(await Dollar.getAll());
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener los registros del dolar' });
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener los tipos de cambio' });
   }
 };
 
-exports.getDollarById = async (req, res) => {
+exports.getCurrent = async (req, res) => {
   try {
-    const dollar = await Dollar.getById(req.params.id);
-    if (!dollar) {
-      return res.status(404).json({ error: 'Dolar no encontrado' });
+    const current = await Dollar.findLastRegister();
+    res.json(current || null);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener el tipo de cambio actual' });
+  }
+};
+
+exports.create = async (req, res) => {
+  try {
+    const price = parseRate(req.body.price);
+    if (!price) return res.status(400).json({ error: 'Tipo de cambio inválido.' });
+    const id = await Dollar.create({ price, observation: req.body.observation });
+    res.status(201).json({ id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al registrar el tipo de cambio' });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const price = parseRate(req.body.price);
+    if (!price) return res.status(400).json({ error: 'Tipo de cambio inválido.' });
+    const result = await Dollar.update(req.params.id, { price, observation: req.body.observation });
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Registro no encontrado' });
+    res.json({ message: 'Tipo de cambio actualizado' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al actualizar el tipo de cambio' });
+  }
+};
+
+exports.remove = async (req, res) => {
+  try {
+    if ((await Dollar.count()) <= 1) {
+      return res.status(400).json({ error: 'Debe existir al menos un tipo de cambio.' });
     }
-    res.json(dollar);
+    const result = await Dollar.delete(req.params.id);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Registro no encontrado' });
+    res.json({ message: 'Registro eliminado' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al recuperar el dolar' });
-  }
-};
-
-exports.createDollar = async (req, res) => {
-  try {
-    const id = await Dollar.create(req.body);
-    res.status(201).json({ customer_id: id });
-  } catch (error) {
-    console.error("Error al crear el cliente:", error);
-    res.status(500).json({ error: 'Error al crear el cliente' });
-  }
-};
-
-exports.updateCustomer = async (req, res) => {
-  try {
-    await Customer.update(req.params.id, req.body);
-    res.json({ message: 'Cliente actualizado correctamente' });
-  } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el cliente' });
-  }
-};
-
-exports.deleteCustomer = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await Customer.delete(id);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Cliente no encontrado' });
-    }
-    res.status(200).json({ message: 'Cliente eliminado' });
-  } catch (err) {
-    res.status(500).json({ error: 'Error al eliminar el cliente' });
-  };
-};
-
-exports.findCustomer = async (req, res) => {
-  try {
-    const { ci, phone } = req.query;
-    const customer = await Customer.findByCIOrPhone(ci, phone);
-    if (!customer) {
-      return res.status(404).json({ error: 'Cliente no encontrado' });
-    }
-    res.json(customer);
-  } catch (error) {
-    res.status(500).json({ error: 'Error al buscar el cliente' });
+    console.error(error);
+    res.status(500).json({ error: 'Error al eliminar el registro' });
   }
 };

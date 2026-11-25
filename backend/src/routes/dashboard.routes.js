@@ -52,8 +52,24 @@ router.get("/", async (req, res) => {
       LIMIT 10
     `)
 
+    const [rateRows] = await db.query(
+      "SELECT price, register_date FROM dollar_exchange ORDER BY register_date DESC, dollar_exchange_id DESC LIMIT 1"
+    )
+
+    const [profitTodayRows] = await db.query(`
+      SELECT IFNULL(SUM(sd.quantity * (sd.unit_price - COALESCE(sd.unit_cost, p.cost))), 0) AS profit
+      FROM sales s
+      JOIN sale_details sd ON sd.sale_id = s.sale_id
+      JOIN products p ON p.product_id = sd.product_id
+      WHERE DATE(s.date) = ?
+    `, [today])
+
     const response = {
+      exchangeRate: rateRows[0]
+        ? { price: parseFloat(rateRows[0].price), date: rateRows[0].register_date }
+        : null,
       summary: {
+        profitToday: parseFloat(profitTodayRows[0].profit || 0),
         salesToday: parseFloat(salesTodayRows[0].total || 0),
         lowStockAlerts: stockAlertsRows[0].count || 0,
         topProducts: topProductsRows.map(p => ({

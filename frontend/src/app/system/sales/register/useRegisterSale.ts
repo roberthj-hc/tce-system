@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useBarcodeScanner } from "../../../../hooks/useBarcodeScanner"
 import { useMemo } from "react";
+import { useCurrentRate } from "@/hooks/useCurrentRate"
+import { effectivePricing } from "@/lib/pricing"
 
 export type Product = {
     product_id: number
@@ -15,6 +17,9 @@ export type Product = {
     category: string;
     section: string;
     cost: number;
+    cost_usd?: number | null;
+    margin_percent?: number | null;
+    exchange_rate?: number | null;
     stock: number;
     stock_minimum: number;
     active: boolean;
@@ -28,6 +33,8 @@ export type SaleProduct = {
     barcode: string
     sale_price: number
     quantity: number
+    // true si el vendedor editó el precio a mano (el switch ya no lo recalcula)
+    price_edited?: boolean
 }
 
 export type Customer = {
@@ -50,6 +57,11 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL
 
 export function useRegisterSale() {
     const router = useRouter()
+
+    // Tipo de cambio más reciente (activado por defecto)
+    const rate = useCurrentRate()
+    const [useCurrentRate_, setUseCurrentRate] = useState(true)
+    const getPricing = (p: Product) => effectivePricing(p, useCurrentRate_, rate)
 
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [availableSections, setAvailableSections] = useState<string[]>([]);
@@ -229,7 +241,7 @@ export function useRegisterSale() {
                 product_id: productToAdd.product_id,
                 name: productToAdd.name,
                 barcode: productToAdd.barcode,
-                sale_price: productToAdd.price,
+                sale_price: getPricing(productToAdd).price,
                 quantity: 1
             }
             setProducts([...products, newSaleProduct])
@@ -273,9 +285,18 @@ export function useRegisterSale() {
     const updatePrice = (id: number, newPrice: number) => {
         if (isNaN(newPrice) || newPrice < 0) return
         setProducts(products.map(p =>
-            p.product_id === id ? { ...p, sale_price: newPrice } : p
+            p.product_id === id ? { ...p, sale_price: newPrice, price_edited: true } : p
         ))
     }
+
+    // Al cambiar el switch o llegar el tipo de cambio, se recalculan las líneas cuyo precio no se editó a mano
+    useEffect(() => {
+        setProducts(prev => prev.map(line => {
+            if (line.price_edited) return line
+            const prod = productList.find(x => x.product_id === line.product_id)
+            return prod ? { ...line, sale_price: effectivePricing(prod, useCurrentRate_, rate).price } : line
+        }))
+    }, [useCurrentRate_, rate, productList])
 
     const updateQuantity = (productId: number, newQuantity: number) => {
         if (isNaN(newQuantity) || newQuantity <= 0) {
@@ -396,7 +417,8 @@ export function useRegisterSale() {
                 sale: {
                     seller_id: sellerId,
                     customer_id: saleForm.customer_id || null,
-                    total
+                    total,
+                    use_current_rate: useCurrentRate_
                 },
                 details: products.map(p => ({
                     product_id: p.product_id,
@@ -434,6 +456,10 @@ export function useRegisterSale() {
     }
 
     return {
+        rate,
+        useCurrentRate: useCurrentRate_,
+        setUseCurrentRate,
+        getPricing,
         products,
         productList,
         total,

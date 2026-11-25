@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast as sonner } from "sonner"
+import { useCurrentRate } from "@/hooks/useCurrentRate"
+import { effectivePricing } from "@/lib/pricing"
 
 export type Product = {
     product_id: number
@@ -9,6 +11,9 @@ export type Product = {
     brand: string
     price: number
     cost: number
+    cost_usd: number | null
+    margin_percent: number | null
+    exchange_rate: number | null
     stock: number
     stock_minimum: number
     photo: string
@@ -38,7 +43,14 @@ export function useProductList() {
     const [categoryFilter, setCategoryFilter] = useState("All")
     const [page, setPage] = useState(1)
     const [perPage, setPerPage] = useState(10)
-    const [products, setProducts] = useState<Product[]>([])
+    const [rawProducts, setProducts] = useState<Product[]>([])
+    // Switch de tipo de cambio más reciente (activado por defecto): solo cambia lo que se muestra
+    const rate = useCurrentRate()
+    const [useCurrentRateSwitch, setUseCurrentRateSwitch] = useState(true)
+    const products = rawProducts.map((p) => {
+        const e = effectivePricing(p, useCurrentRateSwitch, rate)
+        return e.usesRate ? { ...p, price: e.price, cost: e.cost } : p
+    })
     const [loading, setLoading] = useState(true)
     const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active")
     const [columnFilter, setColumnFilter] = useState<ColumnFilter>("all")
@@ -97,13 +109,13 @@ export function useProductList() {
     }, [statusFilter])
 
     useEffect(() => {
-        const validSections = products
+        const validSections = rawProducts
             .map(p => p.section)
             .filter((section): section is string => typeof section === "string" && section.trim() !== "");
 
         const uniqueSections = [...new Set(validSections)];
         setSections(uniqueSections);
-    }, [products]);
+    }, [rawProducts]);
 
     const filtered = products.filter((p) => {
         let textMatch = false;
@@ -191,6 +203,9 @@ export function useProductList() {
     const averageStock = Math.round(totalStock / Math.max(filtered.length, 1))
 
     return {
+        rate,
+        useCurrentRateSwitch,
+        setUseCurrentRateSwitch,
         search,
         setSearch,
         categoryFilter,

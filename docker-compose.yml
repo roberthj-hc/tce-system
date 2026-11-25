@@ -1,42 +1,103 @@
 services:
   mysql:
     image: mysql:8.4
-    container_name: system-mysql
+    container_name: tce-mysql
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: tce-system
-      MYSQL_ROOT_PASSWORD: tce1234
-    ports:
-      - "5000:3306"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: ${TZ:-America/La_Paz}
     volumes:
-      - mysql_data:/var/lib/mysql
+      - tce_mysql_data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro   # solo corre la primera vez
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Sin "ports": MySQL solo es accesible desde los otros contenedores
 
   backend:
-    build:
-      context: ./backend
-    container_name: system-backend
+    build: ./backend
+    image: tce-backend:latest
+    container_name: tce-backend
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: mysql://root:tce1234@mysql:3306/tce-system
-    ports:
-      - "4000:4000"
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      PUBLIC_URL: https://${SITE_ADDRESS}
+      TZ: ${TZ:-America/La_Paz}
+    volumes:
+      - ./data/uploads:/app/src/public/products   # imágenes de productos (carpeta visible en Windows)
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
+
+  backup:
+    image: mysql:8.4
+    container_name: tce-backup
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_PWD: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      TZ: ${TZ:-America/La_Paz}
+    volumes:
+      - ./data/backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    # Copia de la BD al arrancar y luego cada 24 h; conserva 14 días
+    command:
+      - |
+        while true; do
+          f=/backups/db-$$(date +%F).sql
+          mysqldump -hmysql -uroot --single-transaction --routines "$$DB_NAME" > $$f.tmp && mv $$f.tmp $$f
+          find /backups -name 'db-*.sql' -mtime +14 -delete
+          sleep 86400
+        done
 
   frontend:
     build:
       context: ./frontend
-    container_name: system-frontend
+      args:
+        NEXT_PUBLIC_API_URL: ""    # mismo origen, lo enruta Caddy
+    image: tce-frontend:latest
+    container_name: tce-frontend
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-    ports:
-      - "3000:3000"
+      BACKEND_INTERNAL_URL: http://backend:4000
     depends_on:
       - backend
 
+  caddy:
+    image: caddy:2
+    container_name: tce-caddy
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tce_caddy_data:/data        # contiene la CA/certificados: conservar
+      - tce_caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
 volumes:
-  mysql_data:
+  tce_mysql_data:
+  tce_caddy_data:
+  tce_caddy_config:
